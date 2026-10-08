@@ -1,248 +1,331 @@
 "use client";
 
-export const dynamic =
-"force-dynamic";
-
 import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import {
-  doc,
-  getDoc,
-  updateDoc,
+doc,
+getDoc,
+updateDoc,
+serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firestore";
 import { auth } from "@/lib/auth";
-import { useParams, useRouter } from "next/navigation";
+import AuthGuard from "@/components/authgaurd";
+import Navbar from "@/components/navbar";
 
 export default function EditListingPage() {
-  const router = useRouter();
-  const params = useParams();
+const router = useRouter();
+const params = useParams();
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [category, setCategory] = useState("Books");
-  const [condition, setCondition] = useState("Good");
+const id = params?.id as string;
 
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+const [name, setName] = useState("");
+const [description, setDescription] = useState("");
+const [price, setPrice] = useState("");
+const [category, setCategory] = useState("Books");
+const [condition, setCondition] = useState("Good");
+const [campus, setCampus] = useState("");
 
-  useEffect(() => {
-    const fetchListing = async () => {
-      try {
-        if (!auth.currentUser) {
-          setError("You must be logged in.");
-          return;
-        }
+const [loading, setLoading] = useState(true);
+const [saving, setSaving] = useState(false);
+const [error, setError] = useState("");
 
-        const listingId = params.id as string;
+useEffect(() => {
+if (!id) return;
 
-        const listingRef = doc(db, "listings", listingId);
-        const snapshot = await getDoc(listingRef);
 
-        if (!snapshot.exists()) {
-          setError("Listing not found.");
-          return;
-        }
+async function loadListing() {
+  try {
+    const user = auth.currentUser;
 
-        const data = snapshot.data();
-
-        // Make sure the current user owns this listing
-        if (data.sellerId !== auth.currentUser.uid) {
-          setError("You do not have permission to edit this listing.");
-          return;
-        }
-
-        setName(data.name || "");
-        setDescription(data.description || "");
-        setPrice(String(data.price || ""));
-        setCategory(data.category || "Books");
-        setCondition(data.condition || "Good");
-      } catch (error) {
-        console.error("Error loading listing:", error);
-        setError("Failed to load listing.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchListing();
-  }, [params.id]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    setError("");
-
-    if (!name.trim() || !description.trim() || !price) {
-      setError("Please fill in all required fields.");
+    if (!user) {
+      router.replace("/");
       return;
     }
 
-    if (Number(price) <= 0) {
-      setError("Price must be greater than 0.");
+    const listingRef = doc(db, "listings", id);
+    const snapshot = await getDoc(listingRef);
+
+    if (!snapshot.exists()) {
+      setError("Listing not found.");
       return;
     }
 
-    try {
-      setSaving(true);
+    const data = snapshot.data();
 
-      const listingId = params.id as string;
-
-      const listingRef = doc(db, "listings", listingId);
-
-      await updateDoc(listingRef, {
-        name: name.trim(),
-        description: description.trim(),
-        price: Number(price),
-        category,
-        condition,
-        updatedAt: new Date(),
-      });
-
-      router.push("/my-listings");
-    } catch (error) {
-      console.error("Error updating listing:", error);
-      setError("Failed to update listing.");
-    } finally {
-      setSaving(false);
+    if (data.sellerId !== user.uid) {
+      setError("You don't have permission to edit this listing.");
+      return;
     }
-  };
 
-  if (loading) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100 text-gray-900">
-        <p>Loading listing...</p>
-      </main>
-    );
+    setName(data.name || "");
+    setDescription(data.description || "");
+    setPrice(String(data.price ?? ""));
+    setCategory(data.category || "Other");
+    setCondition(data.condition || "Good");
+    setCampus(data.campus || "");
+  } catch (err) {
+    console.error(err);
+    setError("Failed to load listing.");
+  } finally {
+    setLoading(false);
   }
+}
 
-  if (error) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-gray-100 px-4 text-gray-900">
-        <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
-          <h1 className="text-xl font-semibold">
-            {error}
-          </h1>
+loadListing();
+
+
+}, [id, router]);
+
+async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+e.preventDefault();
+
+
+if (!auth.currentUser) {
+  router.replace("/");
+  return;
+}
+
+if (!name.trim()) {
+  setError("Please enter a listing name.");
+  return;
+}
+
+if (!description.trim()) {
+  setError("Please enter a description.");
+  return;
+}
+
+const numericPrice = Number(price);
+
+if (!price || Number.isNaN(numericPrice) || numericPrice < 0) {
+  setError("Please enter a valid price.");
+  return;
+}
+
+if (!campus.trim()) {
+  setError("Please enter a campus or pickup location.");
+  return;
+}
+
+try {
+  setSaving(true);
+  setError("");
+
+  const listingRef = doc(db, "listings", id);
+
+  await updateDoc(listingRef, {
+    name: name.trim(),
+    description: description.trim(),
+    price: numericPrice,
+    category,
+    condition,
+    campus: campus.trim(),
+    updatedAt: serverTimestamp(),
+  });
+
+  router.push("/my-listings");
+} catch (err) {
+  console.error(err);
+  setError("Failed to save changes.");
+} finally {
+  setSaving(false);
+}
+
+
+}
+
+return ( <AuthGuard> <Navbar />
+
+  <main className="min-h-screen bg-[#fafafa] px-5 py-10">
+    <div className="mx-auto max-w-3xl">
+      <button
+        onClick={() => router.push("/my-listings")}
+        className="mb-7 text-sm font-medium text-gray-500 transition hover:text-gray-900"
+      >
+        ← Back to My Listings
+      </button>
+
+      <div className="mb-8">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#4285F4]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[#EA4335]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[#FBBC05]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[#34A853]" />
+        </div>
+
+        <h1 className="text-3xl font-semibold tracking-tight text-gray-950">
+          Edit your listing
+        </h1>
+
+        <p className="mt-2 text-gray-500">
+          Update the details of your CampusCart listing.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
+          <div className="animate-pulse space-y-6">
+            <div className="h-12 rounded-xl bg-gray-100" />
+            <div className="h-32 rounded-xl bg-gray-100" />
+            <div className="h-12 rounded-xl bg-gray-100" />
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="h-12 rounded-xl bg-gray-100" />
+              <div className="h-12 rounded-xl bg-gray-100" />
+            </div>
+            <div className="h-12 rounded-xl bg-gray-100" />
+          </div>
+        </div>
+      ) : error ? (
+        <div className="rounded-3xl border border-red-200 bg-white p-8 text-center shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Unable to edit listing
+          </h2>
+
+          <p className="mt-2 text-sm text-red-600">{error}</p>
 
           <button
-            type="button"
             onClick={() => router.push("/my-listings")}
-            className="mt-6 cursor-pointer rounded-lg bg-black px-5 py-3 font-semibold text-white hover:bg-gray-800"
+            className="mt-6 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white"
           >
             Back to My Listings
           </button>
         </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="min-h-screen bg-gray-100 px-4 py-12 text-gray-900">
-      <div className="mx-auto max-w-2xl rounded-2xl bg-white p-8 shadow-sm">
-        <button
-          type="button"
-          onClick={() => router.push("/my-listings")}
-          className="mb-6 cursor-pointer text-sm text-gray-500 hover:text-black"
+      ) : (
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
         >
-          ← Back to My Listings
-        </button>
+          <div className="space-y-6">
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-800">
+                Listing name
+              </label>
 
-        <h1 className="text-3xl font-semibold">
-          Edit Listing
-        </h1>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3.5 text-sm outline-none transition focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
+                placeholder="e.g. Engineering Mathematics textbook"
+              />
+            </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6">
-          <div>
-            <label className="mb-2 block font-medium">
-              Item name
-            </label>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-800">
+                Description
+              </label>
 
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 outline-none placeholder:text-gray-400 focus:border-black"
-            />
-          </div>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={6}
+                className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3.5 text-sm outline-none transition focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
+                placeholder="Describe your item..."
+              />
+            </div>
 
-          <div>
-            <label className="mb-2 block font-medium">
-              Description
-            </label>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-800">
+                Price
+              </label>
 
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={5}
-              className="w-full resize-none rounded-lg border border-gray-300 bg-white p-3 text-gray-900 outline-none focus:border-black"
-            />
-          </div>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-400">
+                  ₹
+                </span>
 
-          <div>
-            <label className="mb-2 block font-medium">
-              Price
-            </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 py-3.5 pl-9 pr-4 text-sm outline-none transition focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
+                  placeholder="0"
+                />
+              </div>
+            </div>
 
-            <input
-              type="number"
-              min="1"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 outline-none focus:border-black"
-            />
-          </div>
+            <div className="grid gap-6 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-800">
+                  Category
+                </label>
 
-          <div>
-            <label className="mb-2 block font-medium">
-              Category
-            </label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
+                >
+                  <option>Books</option>
+                  <option>Electronics</option>
+                  <option>College Supplies</option>
+                  <option>Other</option>
+                </select>
+              </div>
 
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 outline-none"
-            >
-              <option value="Books">Books</option>
-              <option value="Electronics">Electronics</option>
-              <option value="College Supplies">
-                College Supplies
-              </option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-gray-800">
+                  Condition
+                </label>
 
-          <div>
-            <label className="mb-2 block font-medium">
-              Condition
-            </label>
+                <select
+                  value={condition}
+                  onChange={(e) => setCondition(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
+                >
+                  <option>Like New</option>
+                  <option>Good</option>
+                  <option>Fair</option>
+                </select>
+              </div>
+            </div>
 
-            <select
-              value={condition}
-              onChange={(e) => setCondition(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 bg-white p-3 text-gray-900 outline-none"
-            >
-              <option value="Like New">Like New</option>
-              <option value="Good">Good</option>
-              <option value="Fair">Fair</option>
-            </select>
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-800">
+                Campus / pickup location
+              </label>
+
+              <input
+                type="text"
+                value={campus}
+                onChange={(e) => setCampus(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-4 py-3.5 text-sm outline-none transition focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
+                placeholder="e.g. PES University, RR Campus"
+              />
+            </div>
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-100 p-3 text-sm text-red-700">
+            <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full cursor-pointer rounded-lg bg-black p-3 font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? "Saving changes..." : "Save Changes"}
-          </button>
+          <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => router.push("/my-listings")}
+              disabled={saving}
+              className="rounded-xl border border-gray-200 px-5 py-3.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-xl bg-gray-950 px-6 py-3.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? "Saving changes..." : "Save changes"}
+            </button>
+          </div>
         </form>
-      </div>
-    </main>
-  );
+      )}
+    </div>
+  </main>
+</AuthGuard>
+
+
+);
 }
