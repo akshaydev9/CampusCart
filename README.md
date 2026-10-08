@@ -1,36 +1,137 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CampusCart 🎓
 
-## Getting Started
+### Buy. Sell. Repeat.
 
-First, run the development server:
+A campus-focused marketplace built to help students buy and sell pre-owned items, discover great deals, and connect directly with other students.
+
+**Built by [Akshay (@akshaydev9)](https://github.com/akshaydev9)**
+
+---
+
+## 🌟 About the Project
+
+CampusCart is a full-stack web application I developed to make student-to-student commerce easier and more accessible. From textbooks and electronics to everyday college supplies, students can create listings, discover items, and communicate with sellers in one place.
+
+The project combines authentication, persistent data storage, image uploads, external API integration, and real-time messaging into a single application.
+
+## ✨ Features
+
+* 🔐 **User Authentication** — Secure registration and login with Firebase Authentication.
+* 🛍️ **Marketplace** — Browse listings with search and category filters.
+* 📝 **Listing Management** — Create, edit, delete, and mark your listings as sold.
+* 🖼️ **Image Uploads** — Upload and optimize images using Cloudinary.
+* 📚 **Google Books Integration** — Search for books and retrieve metadata and cover images.
+* 💬 **Real-Time Messaging** — Connect buyers and sellers through conversations.
+* 🔔 **Unread Message Indicators** — See which conversations have unread messages.
+* 🛡️ **Database Security** — Firestore Security Rules enforce listing ownership and conversation access.
+* 📱 **Responsive Design** — Clean, modern interface for desktop and mobile.
+
+## 🛠️ Tech Stack
+
+| Technology              | Usage                          |
+| ----------------------- | ------------------------------ |
+| Next.js                 | Frontend framework and routing |
+| TypeScript              | Type-safe development          |
+| Tailwind CSS            | UI styling                     |
+| Firebase Authentication | User authentication            |
+| Cloud Firestore         | Database and real-time updates |
+| Cloudinary              | Image hosting and optimization |
+| Google Books API        | Book metadata and cover images |
+| Git & GitHub            | Version control                |
+| Vercel / Netlify        | Deployment                     |
+
+## 🏗️ Architecture
+
+CampusCart follows a serverless architecture.
+
+* **Frontend:** Next.js, React, TypeScript, and Tailwind CSS.
+* **Authentication:** Firebase Authentication with protected routes.
+* **Database:** Firestore collections for listings and conversations, with messages stored in nested subcollections.
+* **Image handling:** Cloudinary uploads and optimized image delivery.
+* **External integration:** Google Books API for book search.
+* **Authorization:** Firestore Security Rules restrict listing modifications to their owners and conversation access to participants.
+
+## 🚀 Run Locally
+
+### Prerequisites
+
+* Node.js and npm
+* A Firebase project
+* A Cloudinary account
+* A Google Books API key
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/akshaydev9/CampusCart.git
+cd CampusCart/campuscart
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure environment variables
+
+Create a `.env.local` file in the Next.js project directory:
+
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=
+NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET=
+
+NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY=
+```
+
+Fill in the values from your service dashboards. Never commit `.env.local` to GitHub.
+
+### 4. Start the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 5. Build for production
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run build
+```
 
-## Learn More
+## 🔒 Security
 
-To learn more about Next.js, take a look at the following resources:
+CampusCart uses Firebase Authentication and Firestore Security Rules to enforce access control. Users can modify their own listings, while conversation access is restricted to participating users.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Client-side environment variables prefixed with `NEXT_PUBLIC_` are visible in the browser. Protect access through appropriate Firebase Security Rules and API restrictions, and never place private API secrets in client-side code.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 💡 What This Project Demonstrates
 
-## Deploy on Vercel
+* Full-stack web application development
+* Authentication and authorization
+* Database design and CRUD operations
+* Real-time data synchronization
+* Third-party API integration
+* Image upload and optimization
+* Responsive UI development
+* Version control and deployment workflows
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 👨‍💻 Developer
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Akshay — [@akshaydev9](https://github.com/akshaydev9)**
+
+GitHub: [github.com/akshaydev9](https://github.com/akshaydev9)
+
+---
+
+*CampusCart — Making campus commerce simpler.*
+
+PUBLIC LINK IS campuscart-rcnqhzoqs-akshay-686c.vercel.app
