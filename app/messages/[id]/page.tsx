@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import {
   addDoc,
   arrayRemove,
@@ -556,7 +556,17 @@ function ChatContent() {
 export default function ChatPage() {
   return (
     <AuthGuard>
-      <ChatContent />
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center bg-gray-50">
+            <div className="text-sm font-medium text-gray-500">
+              Loading chat...
+            </div>
+          </div>
+        }
+      >
+        <ChatContent />
+      </Suspense>
     </AuthGuard>
   );
 }
