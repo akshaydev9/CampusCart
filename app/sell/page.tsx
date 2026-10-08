@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -26,37 +25,43 @@ function SellContent() {
   const router = useRouter();
 
   const [name, setName] = useState("");
-  const [description, setDescription] =
-    useState("");
+  const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
-  const [category, setCategory] =
-    useState("Books");
-  const [condition, setCondition] =
-    useState("Good");
+  const [category, setCategory] = useState("Books");
+  const [condition, setCondition] = useState("Good");
 
-  const [image, setImage] =
-    useState<File | null>(null);
+  const [image, setImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState("");
 
-  const [imagePreview, setImagePreview] =
-    useState("");
+  const [bookSearch, setBookSearch] = useState("");
+  const [books, setBooks] = useState<Book[]>([]);
+  const [searchingBooks, setSearchingBooks] = useState(false);
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
 
-  const [bookSearch, setBookSearch] =
-    useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const [books, setBooks] =
-    useState<Book[]>([]);
+  // --------------------------------
+  // CLOUDINARY IMAGE OPTIMIZER
+  // --------------------------------
 
-  const [searchingBooks, setSearchingBooks] =
-    useState(false);
+  const optimizeCloudinaryUrl = (
+    url: string,
+    width: number = 1600
+  ) => {
+    if (!url.includes("res.cloudinary.com")) {
+      return url;
+    }
 
-  const [selectedBook, setSelectedBook] =
-    useState<Book | null>(null);
+    if (!url.includes("/upload/")) {
+      return url;
+    }
 
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
+    return url.replace(
+      "/upload/",
+      `/upload/f_auto,q_auto:best,w_${width}/`
+    );
+  };
 
   // --------------------------------
   // GOOGLE BOOKS
@@ -73,8 +78,7 @@ function SellContent() {
 
     try {
       const apiKey =
-        process.env
-          .NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY;
+        process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY;
 
       if (!apiKey) {
         throw new Error(
@@ -84,19 +88,15 @@ function SellContent() {
 
       const url =
         `https://www.googleapis.com/books/v1/volumes` +
-        `?q=${encodeURIComponent(
-          bookSearch.trim()
-        )}` +
+        `?q=${encodeURIComponent(bookSearch.trim())}` +
         `&maxResults=8` +
         `&printType=books` +
         `&key=${apiKey}`;
 
-      const response =
-        await fetch(url);
+      const response = await fetch(url);
 
       if (!response.ok) {
-        const errorText =
-          await response.text();
+        const errorText = await response.text();
 
         console.error(
           "Google Books API error:",
@@ -108,15 +108,11 @@ function SellContent() {
         );
       }
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       setBooks(data.items || []);
 
-      if (
-        !data.items ||
-        data.items.length === 0
-      ) {
+      if (!data.items || data.items.length === 0) {
         setError(
           "No books found. Try another search."
         );
@@ -155,9 +151,7 @@ function SellContent() {
           ""
         );
 
-      setDescription(
-        cleanDescription
-      );
+      setDescription(cleanDescription);
     }
 
     const cover =
@@ -177,14 +171,13 @@ function SellContent() {
   };
 
   // --------------------------------
-  // IMAGE
+  // IMAGE UPLOAD
   // --------------------------------
 
   const handleImageChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const file =
-      e.target.files?.[0];
+    const file = e.target.files?.[0];
 
     if (!file) {
       return;
@@ -197,10 +190,7 @@ function SellContent() {
       return;
     }
 
-    if (
-      file.size >
-      5 * 1024 * 1024
-    ) {
+    if (file.size > 5 * 1024 * 1024) {
       setError(
         "Image must be smaller than 5MB."
       );
@@ -227,7 +217,9 @@ function SellContent() {
 
     setError("");
 
-    if (!auth.currentUser) {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
       setError(
         "You must be logged in."
       );
@@ -279,10 +271,12 @@ function SellContent() {
     try {
       let imageUrl = "";
 
-      // CLOUDINARY
+      // --------------------------------
+      // CLOUDINARY UPLOAD
+      // --------------------------------
+
       if (image) {
-        const formData =
-          new FormData();
+        const formData = new FormData();
 
         formData.append(
           "file",
@@ -294,14 +288,13 @@ function SellContent() {
           uploadPreset
         );
 
-        const response =
-          await fetch(
-            `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
-            {
-              method: "POST",
-              body: formData,
-            }
-          );
+        const response = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+          {
+            method: "POST",
+            body: formData,
+          }
+        );
 
         if (!response.ok) {
           throw new Error(
@@ -309,59 +302,53 @@ function SellContent() {
           );
         }
 
-        const data =
-          await response.json();
+        const data = await response.json();
 
-        imageUrl =
-          data.secure_url;
+        // Store a high-quality Cloudinary delivery URL.
+        imageUrl = optimizeCloudinaryUrl(
+          data.secure_url,
+          1600
+        );
       }
 
+      // --------------------------------
       // GOOGLE BOOKS COVER
-      if (
-        !image &&
-        selectedBook
-      ) {
+      // --------------------------------
+
+      if (!image && selectedBook) {
         imageUrl =
-          selectedBook
-            .volumeInfo
-            .imageLinks
+          selectedBook.volumeInfo.imageLinks
             ?.thumbnail ||
-          selectedBook
-            .volumeInfo
-            .imageLinks
+          selectedBook.volumeInfo.imageLinks
             ?.smallThumbnail ||
           "";
 
-        imageUrl =
-          imageUrl.replace(
-            "http://",
-            "https://"
-          );
+        imageUrl = imageUrl.replace(
+          "http://",
+          "https://"
+        );
       }
 
+      // --------------------------------
+      // CREATE FIRESTORE LISTING
+      // --------------------------------
+
       await addDoc(
-        collection(
-          db,
-          "listings"
-        ),
+        collection(db, "listings"),
         {
           name: name.trim(),
-          description:
-            description.trim(),
+          description: description.trim(),
           price: Number(price),
           category,
           condition,
           imageUrl,
-          sellerId:
-            auth.currentUser.uid,
+          sellerId: currentUser.uid,
           status: "available",
           createdAt: new Date(),
         }
       );
 
-      router.push(
-        "/marketplace"
-      );
+      router.push("/marketplace");
     } catch (error) {
       console.error(
         "Error creating listing:",
@@ -378,7 +365,6 @@ function SellContent() {
 
   return (
     <main className="min-h-screen bg-[#fafafa] text-gray-900">
-
       <Navbar />
 
       <section className="mx-auto max-w-6xl px-6 py-10 sm:py-14">
@@ -387,9 +373,7 @@ function SellContent() {
         <button
           type="button"
           onClick={() =>
-            router.push(
-              "/marketplace"
-            )
+            router.push("/marketplace")
           }
           className="sell-fade-in mb-8 flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-400 transition hover:text-gray-900"
         >
@@ -400,7 +384,6 @@ function SellContent() {
         <div className="sell-fade-in max-w-2xl">
 
           <div className="flex items-center gap-2">
-
             <span className="h-1.5 w-1.5 rounded-full bg-[#4285F4]" />
             <span className="h-1.5 w-1.5 rounded-full bg-[#EA4335]" />
             <span className="h-1.5 w-1.5 rounded-full bg-[#FBBC05]" />
@@ -409,7 +392,6 @@ function SellContent() {
             <span className="ml-1 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
               Sell on CampusCart
             </span>
-
           </div>
 
           <h1 className="mt-4 text-4xl font-semibold tracking-[-0.04em] text-gray-950 sm:text-5xl">
@@ -426,7 +408,6 @@ function SellContent() {
             upload a photo, and you're ready
             to sell.
           </p>
-
         </div>
 
         {/* FORM */}
@@ -439,7 +420,6 @@ function SellContent() {
 
             {/* ITEM NAME */}
             <div>
-
               <label className="mb-2 block text-sm font-semibold">
                 Item name
               </label>
@@ -449,19 +429,15 @@ function SellContent() {
                 required
                 value={name}
                 onChange={(e) =>
-                  setName(
-                    e.target.value
-                  )
+                  setName(e.target.value)
                 }
                 placeholder="Engineering Mathematics Textbook"
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-sm outline-none transition focus:border-gray-400 focus:bg-white focus:ring-4 focus:ring-gray-100"
               />
-
             </div>
 
             {/* CATEGORY */}
             <div className="mt-6">
-
               <label className="mb-2 block text-sm font-semibold">
                 Category
               </label>
@@ -469,18 +445,13 @@ function SellContent() {
               <select
                 value={category}
                 onChange={(e) => {
-                  const value =
-                    e.target.value;
+                  const value = e.target.value;
 
                   setCategory(value);
 
-                  if (
-                    value !== "Books"
-                  ) {
+                  if (value !== "Books") {
                     setBooks([]);
-                    setSelectedBook(
-                      null
-                    );
+                    setSelectedBook(null);
                     setBookSearch("");
                   }
                 }}
@@ -502,7 +473,6 @@ function SellContent() {
                   Other
                 </option>
               </select>
-
             </div>
 
             {/* GOOGLE BOOKS */}
@@ -514,20 +484,15 @@ function SellContent() {
                   <div className="flex items-center gap-3">
 
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100">
-
                       <div className="flex gap-[2px]">
-
                         <span className="h-1.5 w-1.5 rounded-full bg-[#4285F4]" />
                         <span className="h-1.5 w-1.5 rounded-full bg-[#EA4335]" />
                         <span className="h-1.5 w-1.5 rounded-full bg-[#FBBC05]" />
                         <span className="h-1.5 w-1.5 rounded-full bg-[#34A853]" />
-
                       </div>
-
                     </div>
 
                     <div>
-
                       <h2 className="text-sm font-semibold">
                         Find your book
                       </h2>
@@ -536,7 +501,6 @@ function SellContent() {
                         Search Google Books to
                         automatically fill details.
                       </p>
-
                     </div>
 
                   </div>
@@ -545,9 +509,7 @@ function SellContent() {
 
                     <input
                       type="text"
-                      value={
-                        bookSearch
-                      }
+                      value={bookSearch}
                       onChange={(e) =>
                         setBookSearch(
                           e.target.value
@@ -555,8 +517,7 @@ function SellContent() {
                       }
                       onKeyDown={(e) => {
                         if (
-                          e.key ===
-                          "Enter"
+                          e.key === "Enter"
                         ) {
                           e.preventDefault();
                           searchBooks();
@@ -568,9 +529,7 @@ function SellContent() {
 
                     <button
                       type="button"
-                      onClick={
-                        searchBooks
-                      }
+                      onClick={searchBooks}
                       disabled={
                         searchingBooks ||
                         !bookSearch.trim()
@@ -583,83 +542,75 @@ function SellContent() {
                     </button>
 
                   </div>
-
                 </div>
 
                 {/* RESULTS */}
                 {books.length > 0 && (
                   <div className="max-h-[360px] space-y-2 overflow-y-auto p-3">
 
-                    {books.map(
-                      (book) => {
+                    {books.map((book) => {
+                      const info =
+                        book.volumeInfo;
 
-                        const info =
-                          book.volumeInfo;
+                      const cover =
+                        info.imageLinks
+                          ?.smallThumbnail ||
+                        info.imageLinks
+                          ?.thumbnail;
 
-                        const cover =
-                          info.imageLinks
-                            ?.smallThumbnail ||
-                          info.imageLinks
-                            ?.thumbnail;
+                      return (
+                        <button
+                          key={book.id}
+                          type="button"
+                          onClick={() =>
+                            selectBook(book)
+                          }
+                          className="group flex w-full cursor-pointer gap-4 rounded-xl border border-transparent bg-white p-3 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-sm"
+                        >
 
-                        return (
-                          <button
-                            key={book.id}
-                            type="button"
-                            onClick={() =>
-                              selectBook(
-                                book
-                              )
-                            }
-                            className="group flex w-full cursor-pointer gap-4 rounded-xl border border-transparent bg-white p-3 text-left transition-all duration-300 hover:-translate-y-0.5 hover:border-gray-200 hover:shadow-sm"
-                          >
-
-                            {cover ? (
-                              <img
-                                src={cover.replace(
-                                  "http://",
-                                  "https://"
-                                )}
-                                alt={
-                                  info.title ||
-                                  "Book"
-                                }
-                                className="h-20 w-14 shrink-0 rounded-lg object-cover shadow-sm transition duration-300 group-hover:scale-[1.03]"
-                              />
-                            ) : (
-                              <div className="flex h-20 w-14 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[10px] text-gray-400">
-                                No cover
-                              </div>
-                            )}
-
-                            <div className="min-w-0 flex-1">
-
-                              <h3 className="line-clamp-2 text-sm font-semibold">
-                                {info.title ||
-                                  "Untitled book"}
-                              </h3>
-
-                              {info.authors &&
-                                info.authors
-                                  .length >
-                                  0 && (
-                                  <p className="mt-1 line-clamp-1 text-xs text-gray-400">
-                                    {info.authors.join(
-                                      ", "
-                                    )}
-                                  </p>
-                                )}
-
-                              <p className="mt-3 text-[11px] font-semibold text-gray-400 transition-colors group-hover:text-[#4285F4]">
-                                Select this book →
-                              </p>
-
+                          {cover ? (
+                            <img
+                              src={cover.replace(
+                                "http://",
+                                "https://"
+                              )}
+                              alt={
+                                info.title ||
+                                "Book"
+                              }
+                              className="h-20 w-14 shrink-0 rounded-lg object-cover shadow-sm transition duration-300 group-hover:scale-[1.03]"
+                            />
+                          ) : (
+                            <div className="flex h-20 w-14 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[10px] text-gray-400">
+                              No cover
                             </div>
+                          )}
 
-                          </button>
-                        );
-                      }
-                    )}
+                          <div className="min-w-0 flex-1">
+
+                            <h3 className="line-clamp-2 text-sm font-semibold">
+                              {info.title ||
+                                "Untitled book"}
+                            </h3>
+
+                            {info.authors &&
+                              info.authors.length >
+                                0 && (
+                                <p className="mt-1 line-clamp-1 text-xs text-gray-400">
+                                  {info.authors.join(
+                                    ", "
+                                  )}
+                                </p>
+                              )}
+
+                            <p className="mt-3 text-[11px] font-semibold text-gray-400 transition-colors group-hover:text-[#4285F4]">
+                              Select this book →
+                            </p>
+
+                          </div>
+                        </button>
+                      );
+                    })}
 
                   </div>
                 )}
@@ -669,16 +620,13 @@ function SellContent() {
 
             {/* DESCRIPTION */}
             <div className="mt-6">
-
               <label className="mb-2 block text-sm font-semibold">
                 Description
               </label>
 
               <textarea
                 required
-                value={
-                  description
-                }
+                value={description}
                 onChange={(e) =>
                   setDescription(
                     e.target.value
@@ -688,20 +636,17 @@ function SellContent() {
                 rows={5}
                 className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3.5 text-sm leading-6 outline-none transition focus:border-gray-400 focus:bg-white focus:ring-4 focus:ring-gray-100"
               />
-
             </div>
 
             {/* PRICE + CONDITION */}
             <div className="mt-6 grid gap-5 sm:grid-cols-2">
 
               <div>
-
                 <label className="mb-2 block text-sm font-semibold">
                   Price
                 </label>
 
                 <div className="relative">
-
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-medium text-gray-400">
                     ₹
                   </span>
@@ -719,21 +664,16 @@ function SellContent() {
                     placeholder="450"
                     className="w-full rounded-xl border border-gray-200 bg-gray-50 py-3.5 pl-9 pr-4 text-sm outline-none transition focus:border-gray-400 focus:bg-white focus:ring-4 focus:ring-gray-100"
                   />
-
                 </div>
-
               </div>
 
               <div>
-
                 <label className="mb-2 block text-sm font-semibold">
                   Condition
                 </label>
 
                 <select
-                  value={
-                    condition
-                  }
+                  value={condition}
                   onChange={(e) =>
                     setCondition(
                       e.target.value
@@ -753,7 +693,6 @@ function SellContent() {
                     Fair
                   </option>
                 </select>
-
               </div>
 
             </div>
@@ -770,19 +709,15 @@ function SellContent() {
                 {imagePreview ? (
                   <>
                     <img
-                      src={
-                        imagePreview
-                      }
+                      src={imagePreview}
                       alt="Preview"
                       className="absolute inset-0 h-full w-full object-contain p-4 transition duration-500 group-hover:scale-[1.02]"
                     />
 
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-4 pt-12">
-
                       <p className="text-center text-xs font-medium text-white">
                         Click to replace image
                       </p>
-
                     </div>
                   </>
                 ) : (
@@ -816,9 +751,7 @@ function SellContent() {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={
-                    handleImageChange
-                  }
+                  onChange={handleImageChange}
                   className="hidden"
                 />
 
@@ -846,9 +779,7 @@ function SellContent() {
                   !
                 </span>
 
-                <span>
-                  {error}
-                </span>
+                <span>{error}</span>
 
               </div>
             )}
@@ -902,9 +833,7 @@ function SellContent() {
 
                     {imagePreview ? (
                       <img
-                        src={
-                          imagePreview
-                        }
+                        src={imagePreview}
                         alt="Listing preview"
                         className="h-56 w-full object-cover"
                       />
@@ -953,7 +882,6 @@ function SellContent() {
                     <div className="flex items-start justify-between gap-3">
 
                       <div>
-
                         <p className="text-xs text-gray-400">
                           {category}
                         </p>
@@ -962,13 +890,10 @@ function SellContent() {
                           {name ||
                             "Your item name"}
                         </h3>
-
                       </div>
 
                       <p className="shrink-0 font-semibold">
-                        ₹
-                        {price ||
-                          "0"}
+                        ₹{price || "0"}
                       </p>
 
                     </div>
@@ -1045,7 +970,6 @@ function SellContent() {
           </aside>
 
         </div>
-
       </section>
 
       <style jsx>{`
@@ -1080,7 +1004,6 @@ function SellContent() {
           }
         }
       `}</style>
-
     </main>
   );
 }
@@ -1092,4 +1015,3 @@ export default function SellPage() {
     </AuthGuard>
   );
 }
-
