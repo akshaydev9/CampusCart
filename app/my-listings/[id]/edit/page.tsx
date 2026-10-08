@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   doc,
@@ -13,13 +13,11 @@ import { auth } from "@/lib/auth";
 import AuthGuard from "@/components/authgaurd";
 import Navbar from "@/components/navbar";
 
-export const dynamic = "force-dynamic";
-
-export default function EditListingPage() {
+function EditListingContent() {
   const router = useRouter();
   const params = useParams();
 
-  const id = params.id as string;
+  const id = params?.id as string;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -358,5 +356,21 @@ export default function EditListingPage() {
         </div>
       </main>
     </AuthGuard>
+  );
+}
+
+export default function EditListingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-gray-50">
+          <div className="text-sm font-medium text-gray-500">
+            Loading edit form...
+          </div>
+        </div>
+      }
+    >
+      <EditListingContent />
+    </Suspense>
   );
 }
