@@ -1,373 +1,324 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
 import {
+  addDoc,
+  collection,
   doc,
   getDoc,
+  getDocs,
+  query,
   serverTimestamp,
-  updateDoc,
+  where,
 } from "firebase/firestore";
 import { db } from "@/lib/firestore";
 import { auth } from "@/lib/auth";
+import { useParams, useRouter } from "next/navigation";
 import AuthGuard from "@/components/authgaurd";
 import Navbar from "@/components/navbar";
 
-type PageProps = {
-  params: Promise<{ id: string }>;
+type Listing = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  condition: string;
+  sellerId: string;
+  status: string;
+  imageUrl?: string;
+  campus?: string;
 };
 
-export default function EditListingPage({ params }: PageProps) {
-  const [id, setId] = useState("");
+function ListingContent() {
+  const router = useRouter();
+  const params = useParams();
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [category, setCategory] = useState("Books");
-  const [condition, setCondition] = useState("Good");
-  const [campus, setCampus] = useState("");
+  const rawId = params?.id;
+  const listingId = Array.isArray(rawId) ? rawId[0] : rawId;
 
+  const [listing, setListing] = useState<Listing | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [contacting, setContacting] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    async function load() {
+    let cancelled = false;
+
+    async function fetchListing() {
+      if (!listingId) {
+        setError("Listing not found.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+
       try {
-        const resolvedParams = await params;
-        const listingId = resolvedParams.id;
-
-        setId(listingId);
-
-        const user = auth.currentUser;
-
-        if (!user) {
-          window.location.href = "/";
-          return;
-        }
-
         const listingRef = doc(db, "listings", listingId);
         const snapshot = await getDoc(listingRef);
 
+        if (cancelled) return;
+
         if (!snapshot.exists()) {
-          setError("Listing not found.");
+          setListing(null);
+          setError("Listing not found. It may have been deleted.");
           return;
         }
 
         const data = snapshot.data();
 
-        if (data.sellerId !== user.uid) {
-          setError(
-            "You don't have permission to edit this listing."
-          );
-          return;
-        }
-
-        setName(data.name || "");
-        setDescription(data.description || "");
-        setPrice(String(data.price ?? ""));
-        setCategory(data.category || "Other");
-        setCondition(data.condition || "Good");
-        setCampus(data.campus || "");
+        setListing({
+          ...data,
+          id: snapshot.id,
+        } as Listing);
       } catch (err) {
-        console.error("Error loading listing:", err);
-        setError("Failed to load listing.");
+        console.error("Error fetching listing:", err);
+
+        if (!cancelled) {
+          setError(
+            "Unable to load this listing. Check your connection and permissions."
+          );
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
-    load();
-  }, [params]);
+    fetchListing();
 
-  async function handleSubmit(
-    e: React.FormEvent<HTMLFormElement>
-  ) {
-    e.preventDefault();
+    return () => {
+      cancelled = true;
+    };
+  }, [listingId]);
 
-    if (!id) return;
+  const handleContactSeller = async () => {
+    const user = auth.currentUser;
 
-    if (!auth.currentUser) {
-      window.location.href = "/";
+    if (!user) {
+      alert("Please log in to contact the seller.");
+      router.push("/");
       return;
     }
 
-    if (!name.trim()) {
-      setError("Please enter a listing name.");
+    if (!listing) return;
+
+    if (user.uid === listing.sellerId) {
+      alert("This is your listing. You cannot contact yourself.");
       return;
     }
 
-    if (!description.trim()) {
-      setError("Please enter a description.");
+    if (listing.status?.toLowerCase() === "sold") {
+      alert("This listing has already been sold.");
       return;
     }
 
-    const numericPrice = Number(price);
-
-    if (
-      price === "" ||
-      Number.isNaN(numericPrice) ||
-      numericPrice < 0
-    ) {
-      setError("Please enter a valid price.");
-      return;
-    }
-
-    if (!campus.trim()) {
-      setError("Please enter a campus or pickup location.");
-      return;
-    }
+    setContacting(true);
 
     try {
-      setSaving(true);
-      setError("");
+      const conversationsQuery = query(
+        collection(db, "conversations"),
+        where("listingId", "==", listing.id),
+        where("participants", "array-contains", user.uid)
+      );
 
-      await updateDoc(doc(db, "listings", id), {
-        name: name.trim(),
-        description: description.trim(),
-        price: numericPrice,
-        category,
-        condition,
-        campus: campus.trim(),
-        updatedAt: serverTimestamp(),
+      const conversationsSnapshot = await getDocs(conversationsQuery);
+
+      const existingConversation = conversationsSnapshot.docs.find((item) => {
+        const data = item.data();
+        return (
+          Array.isArray(data.participants) &&
+          data.participants.includes(listing.sellerId)
+        );
       });
 
-      setSaved(true);
+      if (existingConversation) {
+        router.push(`/messages/${existingConversation.id}`);
+        return;
+      }
 
-      setTimeout(() => {
-        window.location.href = "/my-listings";
-      }, 700);
+      const conversationRef = await addDoc(
+        collection(db, "conversations"),
+        {
+          listingId: listing.id,
+          listingName: listing.name,
+          participants: [user.uid, listing.sellerId],
+          unreadFor: [listing.sellerId],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }
+      );
+
+      router.push(`/messages/${conversationRef.id}`);
     } catch (err) {
-      console.error("Error updating listing:", err);
-      setError("Failed to save changes.");
+      console.error("Error contacting seller:", err);
+      alert(
+        "Could not start a conversation. Check your Firestore permissions and try again."
+      );
     } finally {
-      setSaving(false);
+      setContacting(false);
     }
-  }
+  };
+
+  const isOwner =
+    !!auth.currentUser &&
+    !!listing &&
+    auth.currentUser.uid === listing.sellerId;
+
+  const isSold = listing?.status?.toLowerCase() === "sold";
 
   return (
-    <AuthGuard>
+    <main className="min-h-screen bg-gray-50 text-gray-900">
       <Navbar />
 
-      <main className="min-h-screen bg-[#fafafa] px-5 py-10 sm:px-8">
-        <div className="mx-auto max-w-3xl">
-          <button
-            type="button"
-            onClick={() => {
-              window.location.href = "/my-listings";
-            }}
-            className="mb-7 text-sm font-medium text-gray-500 transition hover:text-gray-900"
-          >
-            ← Back to My Listings
-          </button>
+      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+        <button
+          onClick={() => router.back()}
+          className="mb-6 inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium transition hover:bg-gray-100"
+        >
+          <span aria-hidden="true">←</span>
+          Back
+        </button>
 
-          <div className="mb-8">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#4285F4]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-[#EA4335]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-[#FBBC05]" />
-              <span className="h-1.5 w-1.5 rounded-full bg-[#34A853]" />
-            </div>
-
-            <h1 className="text-3xl font-semibold tracking-tight text-gray-950 sm:text-4xl">
-              Edit your listing
-            </h1>
-
-            <p className="mt-2 text-gray-500">
-              Update the details of your CampusCart listing.
-            </p>
+        {loading ? (
+          <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center">
+            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-200 border-t-blue-600" />
+            <p className="text-gray-600">Loading listing...</p>
           </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-red-200 bg-white p-8 text-center">
+            <h1 className="text-xl font-bold text-gray-900">
+              Could not open listing
+            </h1>
+            <p className="mt-3 text-sm text-red-600">{error}</p>
 
-          {loading ? (
-            <div className="rounded-3xl border border-gray-200 bg-white p-8 shadow-sm">
-              <div className="animate-pulse space-y-6">
-                <div className="h-12 rounded-xl bg-gray-100" />
-                <div className="h-32 rounded-xl bg-gray-100" />
-                <div className="h-12 rounded-xl bg-gray-100" />
-
-                <div className="grid gap-6 sm:grid-cols-2">
-                  <div className="h-12 rounded-xl bg-gray-100" />
-                  <div className="h-12 rounded-xl bg-gray-100" />
+            <button
+              onClick={() => router.push("/marketplace")}
+              className="mt-6 rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+            >
+              Back to Marketplace
+            </button>
+          </div>
+        ) : listing ? (
+          <div className="grid gap-8 md:grid-cols-2">
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+              {listing.imageUrl ? (
+                <img
+                  src={listing.imageUrl}
+                  alt={listing.name}
+                  className="h-80 w-full object-contain p-4 sm:h-[460px]"
+                />
+              ) : (
+                <div className="flex h-80 items-center justify-center bg-gray-100 text-gray-400 sm:h-[460px]">
+                  No image available
                 </div>
-
-                <div className="h-12 rounded-xl bg-gray-100" />
-              </div>
+              )}
             </div>
-          ) : error ? (
-            <div className="rounded-3xl border border-red-200 bg-white p-8 text-center shadow-sm">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Unable to edit listing
-              </h2>
 
-              <p className="mt-2 text-sm text-red-600">
-                {error}
+            <section className="rounded-2xl border border-gray-200 bg-white p-6 sm:p-8">
+              <div className="mb-4 flex flex-wrap gap-2">
+                {listing.category && (
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                    {listing.category}
+                  </span>
+                )}
+
+                {listing.condition && (
+                  <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">
+                    {listing.condition}
+                  </span>
+                )}
+
+                {isSold && (
+                  <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                    Sold
+                  </span>
+                )}
+              </div>
+
+              <h1 className="break-words text-3xl font-bold tracking-tight">
+                {listing.name}
+              </h1>
+
+              <p className="mt-4 text-3xl font-extrabold text-blue-700">
+                ₹{Number(listing.price || 0).toLocaleString("en-IN")}
               </p>
 
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href = "/my-listings";
-                }}
-                className="mt-6 rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-black"
-              >
-                Back to My Listings
-              </button>
-            </div>
-          ) : (
-            <form
-              onSubmit={handleSubmit}
-              className="rounded-3xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8"
-            >
-              <div className="space-y-6">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-800">
-                    Listing name
-                  </label>
+              <div className="my-6 border-t border-gray-100" />
 
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Engineering Mathematics textbook"
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3.5 text-sm outline-none transition focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
-                  />
-                </div>
+              <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">
+                Description
+              </h2>
 
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-800">
-                    Description
-                  </label>
+              <p className="mt-3 whitespace-pre-wrap break-words leading-7 text-gray-700">
+                {listing.description || "No description provided."}
+              </p>
 
-                  <textarea
-                    value={description}
-                    onChange={(e) =>
-                      setDescription(e.target.value)
-                    }
-                    rows={6}
-                    placeholder="Describe your item..."
-                    className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3.5 text-sm leading-6 outline-none transition focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-800">
-                    Price
-                  </label>
-
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-gray-400">
-                      ₹
-                    </span>
-
-                    <input
-                      type="number"
-                      min="0"
-                      value={price}
-                      onChange={(e) =>
-                        setPrice(e.target.value)
-                      }
-                      placeholder="0"
-                      className="w-full rounded-xl border border-gray-200 py-3.5 pl-9 pr-4 text-sm outline-none transition focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-6 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-gray-800">
-                      Category
-                    </label>
-
-                    <select
-                      value={category}
-                      onChange={(e) =>
-                        setCategory(e.target.value)
-                      }
-                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
-                    >
-                      <option>Books</option>
-                      <option>Electronics</option>
-                      <option>College Supplies</option>
-                      <option>Other</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-semibold text-gray-800">
-                      Condition
-                    </label>
-
-                    <select
-                      value={condition}
-                      onChange={(e) =>
-                        setCondition(e.target.value)
-                      }
-                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm outline-none focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
-                    >
-                      <option>Like New</option>
-                      <option>Good</option>
-                      <option>Fair</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-gray-800">
-                    Campus / pickup location
-                  </label>
-
-                  <input
-                    type="text"
-                    value={campus}
-                    onChange={(e) =>
-                      setCampus(e.target.value)
-                    }
-                    placeholder="e.g. PES University, RR Campus"
-                    className="w-full rounded-xl border border-gray-200 px-4 py-3.5 text-sm outline-none transition focus:border-gray-400 focus:ring-4 focus:ring-gray-100"
-                  />
-                </div>
-              </div>
-
-              {error && (
-                <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                  {error}
+              {listing.campus && (
+                <div className="mt-6">
+                  <h2 className="text-sm font-bold uppercase tracking-wide text-gray-500">
+                    Campus
+                  </h2>
+                  <p className="mt-2 text-gray-700">{listing.campus}</p>
                 </div>
               )}
 
-              {saved && (
-                <div className="mt-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-                  Changes saved successfully.
-                </div>
-              )}
+              <div className="mt-8 border-t border-gray-100 pt-6">
+                {isOwner ? (
+                  <div className="rounded-xl bg-blue-50 p-4">
+                    <p className="font-semibold text-blue-900">
+                      This is your listing.
+                    </p>
+                    <p className="mt-1 text-sm text-blue-800">
+                      You can manage or edit it from My Listings.
+                    </p>
 
-              <div className="mt-8 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => {
-                    window.location.href = "/my-listings";
-                  }}
-                  disabled={saving}
-                  className="rounded-xl border border-gray-200 px-5 py-3.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
-                >
-                  Cancel
-                </button>
+                    <button
+                      onClick={() => router.push("/my-listings")}
+                      className="mt-4 w-full rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700"
+                    >
+                      Manage My Listings
+                    </button>
+                  </div>
+                ) : isSold ? (
+                  <button
+                    disabled
+                    className="w-full cursor-not-allowed rounded-lg bg-gray-200 px-5 py-3 font-semibold text-gray-500"
+                  >
+                    This item has been sold
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleContactSeller}
+                    disabled={contacting}
+                    className="w-full rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {contacting ? "Opening chat..." : "Contact Seller"}
+                  </button>
+                )}
 
-                <button
-                  type="submit"
-                  disabled={saving || saved}
-                  className="rounded-xl bg-gray-950 px-6 py-3.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saving
-                    ? "Saving changes..."
-                    : saved
-                      ? "Saved"
-                      : "Save changes"}
-                </button>
+                <p className="mt-3 text-center text-xs text-gray-500">
+                  {isOwner
+                    ? "Only you should be able to edit your listing."
+                    : "Contact the seller to discuss this item."}
+                </p>
               </div>
-            </form>
-          )}
-        </div>
-      </main>
+            </section>
+          </div>
+        ) : null}
+      </div>
+    </main>
+  );
+}
+
+export default function ListingPage() {
+  return (
+    <AuthGuard>
+      <ListingContent />
     </AuthGuard>
   );
 }
