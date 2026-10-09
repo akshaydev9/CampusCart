@@ -134,4 +134,4 @@ GitHub: [github.com/akshaydev9](https://github.com/akshaydev9)
 
 *CampusCart — Making campus commerce simpler.*
 
-PUBLIC LINK IS campuscart-rcnqhzoqs-akshay-686c.vercel.app
+PUBLIC LINK IS campuscart-ebr5z0na3-akshay-686c.vercel.app
